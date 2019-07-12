@@ -11,11 +11,12 @@ from sys import platform
 from models import *
 from utils.datasets import *
 from utils.utils import *
+import torch
 
 timer_start = time.time()
 
 vs = cv2.VideoCapture("input/medical2.avi")
-#vs = cv2.VideoCapture(0)
+#vs = cv2.VideoCapture(1)
 
 # derive the paths to the YOLO weights and model configuration
 #model_dir = 'prod_model'
@@ -62,7 +63,11 @@ def detect(im0,
 		#det[:, 3] = det[:, 3] * W_ratio
 
 	if det is not None:
-		return det.detach().numpy()
+		result = det.detach()
+		if torch.cuda.is_available():
+			result.cpu()
+			return result.numpy()
+		return result.numpy()
 
 	return None
 
