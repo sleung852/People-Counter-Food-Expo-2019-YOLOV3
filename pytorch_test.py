@@ -15,7 +15,7 @@ from utils.utils import *
 timer_start = time.time()
 
 vs = cv2.VideoCapture("input/medical2.avi")
-#vs = cv2.VideoCapture(1)
+#vs = cv2.VideoCapture(0)
 
 # derive the paths to the YOLO weights and model configuration
 #model_dir = 'prod_model'
@@ -25,23 +25,13 @@ W, H = None, None
 
 ### DETECTION FUNCTION - START ###
 
-def detect(input_img_numpy,
+def detect(im0,
 			cfg = "prod_model/yolov3-tiny.cfg",
 			weights = "prod_model/yolov3-tiny_final-TL.weights",
 			conf_thres = 0.4,
 			nms_thres = 0.4):
 
-	H_org, W_org, _ = input_img_numpy.shape
-
-	test_img=np.array(input_img_numpy)
-
-	img, *_ = letterbox(test_img, new_shape=416)
-	H_tran, W_tran, _ = img.shape
-
-	# Normalize RGB
-	img = img[:, :, ::-1].transpose(2, 0, 1)  # BGR to RGB
-	img = np.ascontiguousarray(img, dtype=np.float32)  # uint8 to float32
-	img /= 255.0  # 0 - 255 to 0.0 - 1.0
+	img = preprocess_numpy_img(im0)
 
 	device = torch_utils.select_device()
 	torch.backends.cudnn.benchmark = False  # set False for reproducible results
@@ -61,55 +51,68 @@ def detect(input_img_numpy,
 	pred, _ = model(img)
 	det = non_max_suppression(pred, conf_thres, nms_thres)[0]
 
-	H_ratio, W_ratio = H_org / H_tran, W_org / W_tran
+	#H_ratio, W_ratio = H_org / H_tran, W_org / W_tran
 
 	if det is not None and len(det) > 0:
-	    # Rescale boxes from 416 to true image size
-	    det[:, 0] = det[:, 0] * H_ratio
-	    det[:, 1] = det[:, 1] * W_ratio
-	    det[:, 2] = det[:, 2] * H_ratio
-	    det[:, 3] = det[:, 3] * W_ratio
+		# Rescale boxes from 416 to true image size
+		det[:, :4] = scale_coords(img.shape[2:], det[:, :4], im0.shape).round()
+		#det[:, 0] = det[:, 0] * H_ratio
+		#det[:, 1] = det[:, 1] * W_ratio
+		#det[:, 2] = det[:, 2] * H_ratio
+		#det[:, 3] = det[:, 3] * W_ratio
 
-	return det.detach().numpy()
+	if det is not None:
+		return det.detach().numpy()
+
+	return None
 
 ### DETECTION FUNCTION - END ###
 
 frameIndex = 0
-
+count = 0
 time_per_frame = []
 
 # loop over frames from the video file stream
 while True:
-    # read the next frame from the file
-    (grabbed, frame) = vs.read()
+	# read the next frame from the file
+	(grabbed, frame) = vs.read()
+	count += 1
 
-    # if the frame was not grabbed, then we have reached the end
-    # of the stream
-    if not grabbed:
-        break
+	# if the frame was not grabbed, then we have reached the end
+	# of the stream
+	if not grabbed:
+		break
 
-    # if the frame dimensions are empty, grab them
-    if W is None or H is None:
-        (H, W) = frame.shape[:2]
+	# if the frame dimensions are empty, grab them
+	if W is None or H is None:
+		(H, W) = frame.shape[:2]
 
-    # construct a blob from the input frame and then perform a forward
-    # pass of the YOLO object detector, giving us our bounding boxes
-    # and associated probabilities
-    dets = []
-    dets = detect(frame)
-    
-    for det in dets:
-        x, y, w, h = det[0:4]
-        cv2.rectangle(frame, (x, y), (w, h), (0,255,0), 2)
-        
-    cv2.imshow('frame', frame)
-    if cv2.waitKey(1) & 0xFF == ord('q'):
-        break
-    
-    # counter += 1
+	# construct a blob from the input frame and then perform a forward
+	# pass of the YOLO object detector, giving us our bounding boxes
+	# and associated probabilities
+	dets = []
+	dets = detect(frame)
+	im0 = frame
+	if dets is not None:
+		for *xyxy, conf, cls_conf, cls in dets:
+			centre_x = int((xyxy[0] + xyxy[2])/2)
+			centre_y = int((xyxy[1] + xyxy[3])/2)
+			cv2.circle(im0,(centre_x,centre_y), 2, (0,0,255), -1)
+			cv2.rectangle(im0, (xyxy[0],xyxy[1]), (xyxy[2],xyxy[3]), (0,0,255), 2)
 
-    # increase frame index
-    frameIndex += 1
+		if False:
+			for det in dets:
+				x1, y1, x2, y2 = det[0:4]
+				cv2.rectangle(frame, (x1, y1), (x2, y2), (0,255,0), 2)
+		
+	cv2.imshow('frame', frame)
+	if cv2.waitKey(1) & 0xFF == ord('q'):
+		break
+	
+	# counter += 1
+
+	# increase frame index
+	frameIndex += 1
 
 # release the file pointers
 print("[INFO] cleaning up...")
