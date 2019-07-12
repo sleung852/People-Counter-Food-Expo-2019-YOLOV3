@@ -15,7 +15,7 @@ import torch
 
 timer_start = time.time()
 
-vs = cv2.VideoCapture("input/medical2.avi")
+vs = cv2.VideoCapture("input/fwss1.MOV")
 #vs = cv2.VideoCapture(1)
 
 # derive the paths to the YOLO weights and model configuration
@@ -65,7 +65,7 @@ def detect(im0,
 	if det is not None:
 		result = det.detach()
 		if torch.cuda.is_available():
-			result.cpu()
+			result = result.cpu()
 			return result.numpy()
 		return result.numpy()
 
