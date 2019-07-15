@@ -1,27 +1,23 @@
 #!/usr/bin/env python -W ignore::DeprecationWarning
 # import the necessary packages
 import numpy as np
-import imutils
-import time
 import cv2
-import os
-from imutils.video import FPS
 
-# yolov3 pytorch
-from sys import platform
+# yolov3 using pytorch
 from models import *
 from utils.datasets import *
 from utils.utils import *
-import torch
 
 # own packages
 from headdetection import HeadDetection
 from objtracksort import SortAlgorithm
-
+from tools.pipelinetimer import PipelineTimer
 
 # setup
 display = True
 print_result = True
+stack_mode = False
+stack_num = 1
 
 # obtain image data from webcam
 #vs = cv2.VideoCapture(0)
@@ -30,7 +26,8 @@ vs = cv2.VideoCapture("input/fwss1.MOV")
 
 frameIndex = 0
 time_per_frame = []
-counter = 0
+left_counter = 0
+right_counter = 0
 stack_frames = 30
 W, H = None, None
 
@@ -38,36 +35,20 @@ W, H = None, None
 headdet = HeadDetection()
 
 # initilise object tracking model
-# Return true if line segments AB and CD intersect
-objtrack = SortAlgorithm()
+objtrack = SortAlgorithm(hor=True)
 
-# object counting
+# FPS counting
 totalFrames = 0
 
 # initialise all the timers to evaluate the pipeline speed
-class PipelineTimer:
-    def __init__(self):
-        self.total_time = 0
-        self.timer_start = 0
-        self.timer_end = 0
-        self.record = []
-    def start(self):
-        self.timer_start = time.time()
-    def end(self):
-        self.timer_end = time.time() - self.timer_start
-        self.record.append(self.timer_end)
-    def report(self):
-        return sum(self.record)/len(self.record)
-
-frames_storing_timer = PipelineTimer()
+frames_storing_timer = PipelienTimer() # suggest disable during production
 obj_detection_timer = PipelineTimer()
 obj_tracking_timer = PipelineTimer()
-#displaying_timer = PipelineTimer()
+displaying_timer = PipelineTimer()
+overall_timer = PipelineTimer()
+fps_timer = PipelineTimer()
 
-# start the frames per second throughput estimator
-fps = FPS().start()
-
-# stack related
+# stack related variables initiation
 stack_frames_count = 0
 im0s=[]
 
@@ -78,6 +59,7 @@ dims = []
 # loop over frames from the video file stream
 while True:
     frames_storing_timer.start()
+    fps_timer.start()
     # read the next frame from the file
     (grabbed, im0) = vs.read()
     stack_frames_count += 1
@@ -95,23 +77,29 @@ while True:
         line = [(int(W/2)+100,0),(int(W/2)+100,H)] # for fwss1.MOV
         objtrack.set_line(line[0], line[1])
 
-    im0s.append(im0)
+    if stack_mode:
+        im0s.append(im0)
 
-    if stack_frames_count == 30:
+    if stack_frames_count == stack_num:
 
         frames_storing_timer.end()
         obj_detection_timer.start()
+        if stack_mode:
+            dets = headdet.detect_mult(im0s)
+            obj_detection_timer.end()
+            for i in range(len(dets)):
+                print(type(dets[i]))
+                dims.append(dets[i].shape)
+                left_counter, right_counter = objtrack.output_counter(dets[i])
+                print(left_counter, right_counter)
+        else:
+            dets = headdet.detect_one(im0)
 
-        dets = headdet.detect_mult(im0s)
+            obj_detection_timer.end()
+            obj_tracking_timer.start()
 
-        obj_detection_timer.end()
-        obj_tracking_timer.start()
-
-        for i in range(len(dets)):
-            print(type(dets[i]))
-            dims.append(dets[i].shape)
-            counter = objtrack.output_counter(dets[i])
-            print(counter)
+            left_counter, right_counter = objtrack.output_counter(dets)
+            print(left_counter, right_counter)
 
         obj_tracking_timer.end()
 
@@ -119,17 +107,19 @@ while True:
 
     # display line
     if display:
+        # add a title
+        cv2.putText(im0, 'YOLOV3TINY+SORT HUMAN HEAD TRAFFIC COUNTER - DEVELOPED BY SH LEUNG', (50,50), cv2.FONT_HERSHEY_DUPLEX, 1.0, (255, 255, 255), 1)
         # draw the line
         cv2.line(im0, line[0], line[1], (0,255,0), 3)
-        # draw counter
-        cv2.putText(im0, str(counter), (100,200), cv2.FONT_HERSHEY_DUPLEX, 5.0, (0, 255, 255), 10)
+        # draw counters
+        info_str = 'Left: {} | Right: {}'.format(left_counter, right_counter)
+        cv2.putText(im0, info_str, (100,100), cv2.FONT_HERSHEY_DUPLEX, 1.0, (0, 255, 0), 3)
         # display the drawn frame
         cv2.imshow('frame', im0)
         if cv2.waitKey(1) & 0xFF == ord('q'):
             break
 
     # increase frame index
-    fps.update()
     frameIndex += 1
 
 # release the file pointers
@@ -139,7 +129,7 @@ vs.release()
 print(dims)
 
 print('Pixel {} x {}'.format(H, W))
-#print('FPS: {:.2f}'.format(frameIndex/time_took))
+#print('FPS: {:.2f}'.format(fps.fps()))
 
 #report
 print('Time took for Reading 30 frames: {}'.format(frames_storing_timer.report()))
