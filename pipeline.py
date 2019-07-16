@@ -16,24 +16,27 @@ from headdetection import HeadDetection
 from objtracksort import SortAlgorithm
 from tools.pipelinetimer import PipelineTimer
 
-def main(display, stacknum, test_mode, conf_thres):
+def main(display, stacknum, test_mode, conf_thres, hor, savebool):
     # setup
     display = opt.display
-    stacknum = opt.stacknum
+    stack_num = opt.stacknum
     if stacknum > 1:
         stack_mode = False
+    else:
+    	stack_mode = True
     test_mode = opt.testmode
     conf_thres = opt.conf
 
     # setup recording result
-    if os.path.exists('record'):
-        shutil.rmtree('record')  # delete output folder
-    os.makedirs('record')
-    record_perNframe = 1800 #30frames*60seconds -> record once per minute
-    result_file = open("result.txt", "w+")
+    if savebool:
+	    if os.path.exists('record'):
+	        shutil.rmtree('record')  # delete output folder
+	    os.makedirs('record')
+	    record_perNframe = 1800 #30frames*60seconds -> record once per minute
+	    result_file = open("result.txt", "w+")
 
     # obtain image data from webcam
-    if testmode:
+    if test_mode:
         vs = cv2.VideoCapture("input/fwss1.MOV")
         #vs = cv2.VideoCapture("input/fwss2.MOV")
     else:
@@ -61,7 +64,7 @@ def main(display, stacknum, test_mode, conf_thres):
     obj_tracking_timer = PipelineTimer()
     displaying_timer = PipelineTimer()
     #overall_timer = PipelineTimer()
-    #fps_timer = PipelineTimer()
+    fps_timer = PipelineTimer()
 
     # stack related variables initiation
     stack_frames_count = 0
@@ -91,7 +94,7 @@ def main(display, stacknum, test_mode, conf_thres):
                 line = [(int(W/2)+100,0),(int(W/2)+100,H)] # for fwss1.MOV
                 #line = [(int(W/2),0),(int(W/2),H)]
             else:
-                line = [(0,(int(H/2)),(W,int(H/2))] # for fwss2.MOV or fwss3.MOV
+                line = [(0, (int(H/2)), (W, int(H/2)))] # for fwss2.MOV or fwss3.MOV
             objtrack.set_line(line[0], line[1])
 
         if stack_mode:
@@ -105,10 +108,8 @@ def main(display, stacknum, test_mode, conf_thres):
                 dets = headdet.detect_mult(im0s)
                 obj_detection_timer.end()
                 for i in range(len(dets)):
-                    print(type(dets[i]))
                     dims.append(dets[i].shape)
                     left_counter, right_counter = objtrack.output_counter(dets[i])
-                    print(left_counter, right_counter)
             else:
                 dets = headdet.detect_one(im0)
 
@@ -116,7 +117,6 @@ def main(display, stacknum, test_mode, conf_thres):
                 obj_tracking_timer.start()
 
                 left_counter, right_counter = objtrack.output_counter(dets)
-                print(left_counter, right_counter)
 
             obj_tracking_timer.end()
 
@@ -148,14 +148,13 @@ def main(display, stacknum, test_mode, conf_thres):
             if frameIndex > 450: # around 15s testing
                 break
 
-        if frameIndex % record_perNframe = 0:
-            result_file.write("{}, {}, {}\n".format(time.time(), left_counter, right_counter)
+        if savebool:
+	        if frameIndex % record_perNframe == 0:
+	            result_file.write("{}, {}, {}\n".format(time.time(), left_counter, right_counter))
 
     # release the file pointers
     print("[INFO] cleaning up...")
     vs.release()
-
-    print(dims)
 
     print('Pixel {} x {}'.format(H, W))
     #print('FPS: {:.2f}'.format(fps.fps()))
@@ -171,8 +170,8 @@ def main(display, stacknum, test_mode, conf_thres):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--testmode', type=bool, default=False)
-    pareser.add_arguement('--display', type=bool, default=False)
-    pareser.add_arguement('--stacknum', type=int, default=1)
+    parser.add_argument('--display', type=bool, default=False)
+    parser.add_argument('--stacknum', type=int, default=1)
     parser.add_argument('--hormode', type=bool, default=True)
     parser.add_argument('--conf', type=float, default=0.4)
     parser.add_argument('--savetxt', type=bool, default=True)
@@ -182,5 +181,7 @@ if __name__ == '__main__':
         main(display = opt.display,
             stacknum = opt.stacknum,
             test_mode = opt.testmode,
-            conf_thres = opt.conf)
+            conf_thres = opt.conf,
+            hor = opt.hormode,
+            savebool = opt.savetxt)
 
