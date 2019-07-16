@@ -41,7 +41,7 @@ objtrack = SortAlgorithm(hor=True)
 totalFrames = 0
 
 # initialise all the timers to evaluate the pipeline speed
-frames_storing_timer = PipelienTimer() # suggest disable during production
+frames_storing_timer = PipelineTimer() # suggest disable during production
 obj_detection_timer = PipelineTimer()
 obj_tracking_timer = PipelineTimer()
 displaying_timer = PipelineTimer()
