@@ -14,10 +14,11 @@ from objtracksort import SortAlgorithm
 from tools.pipelinetimer import PipelineTimer
 
 # setup
-display = True
+display = False
 print_result = True
 stack_mode = False
 stack_num = 1
+test_mode = True
 
 # obtain image data from webcam
 #vs = cv2.VideoCapture(0)
@@ -122,6 +123,10 @@ while True:
     # increase frame index
     frameIndex += 1
     print("Left: {} | Right {}".format(left_counter, right_counter))
+
+    if test_mode:
+        if frameIndex > 450: # around 15s testing
+            break
 
 # release the file pointers
 print("[INFO] cleaning up...")
