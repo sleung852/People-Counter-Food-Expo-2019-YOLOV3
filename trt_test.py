@@ -1,6 +1,7 @@
 from torch2trt import torch2trt
 from models import *
 from tools.pipelinetimer import PipelineTimer
+import torch
 
 torch_timer = PipelineTimer()
 trt_timer = PipelineTimer()

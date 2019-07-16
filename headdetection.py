@@ -31,7 +31,7 @@ class HeadDetection:
 	def detect_one(self, im0):
 
 		img = preprocess_numpy_img(im0)
-
+		print(img.shape)
 		# Get detections
 		img = torch.from_numpy(img).unsqueeze(0).to(self.device)
 		pred, _ = self.model(img)
