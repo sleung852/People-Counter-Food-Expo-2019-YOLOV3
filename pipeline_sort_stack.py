@@ -121,6 +121,7 @@ while True:
 
     # increase frame index
     frameIndex += 1
+    print("Left: {} | Right {}".format(left_counter, right_counter))
 
 # release the file pointers
 print("[INFO] cleaning up...")
@@ -132,9 +133,9 @@ print('Pixel {} x {}'.format(H, W))
 #print('FPS: {:.2f}'.format(fps.fps()))
 
 #report
-print('Time took for Reading 30 frames: {}'.format(frames_storing_timer.report()))
-print('Time took for ObjDetect 30 frames: {}'.format(obj_detection_timer.report()))
-print('Time took for ObjTrack 30 frames: {}'.format(obj_tracking_timer.report()))
+print('Time took for Reading {} frame(s): {}'.format(stack_num, frames_storing_timer.report()))
+print('Time took for ObjDetect {} frame(s): {}'.format(stack_num, obj_detection_timer.report()))
+print('Time took for ObjTrack {} frame(s): {}'.format(stack_num, obj_tracking_timer.report()))
 
 cv2.destroyAllWindows()
 
