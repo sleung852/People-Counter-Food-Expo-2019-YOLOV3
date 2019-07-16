@@ -1,185 +1,186 @@
+#!/usr/bin/env python -W ignore::DeprecationWarning
 # import the necessary packages
 import numpy as np
-import imutils
-import time
 import cv2
-import os
-from imutils.video import FPS
+import os, shutil
+import argparse
+import time
 
-# yolov3 pytorch
-from sys import platform
+# yolov3 using pytorch
 from models import *
 from utils.datasets import *
 from utils.utils import *
-import torch
 
 # own packages
 from headdetection import HeadDetection
-import dlib
-from trackingalgo.centroidtracker import CentroidTracker
-from trackingalgo.trackableobject import TrackableObject
+from objtracksort import SortAlgorithm
+from tools.pipelinetimer import PipelineTimer
 
-# setup
-display = True
-print_result = True
+def main(display, stacknum, test_mode, conf_thres):
+    # setup
+    display = opt.display
+    stacknum = opt.stacknum
+    if stacknum > 1:
+        stack_mode = False
+    test_mode = opt.testmode
+    conf_thres = opt.conf
 
-# obtain image data from webcam
-#vs = cv2.VideoCapture(0)
-vs = cv2.VideoCapture("input/fwss1.MOV")
+    # setup recording result
+    if os.path.exists('record'):
+        shutil.rmtree('record')  # delete output folder
+    os.makedirs('record')
+    record_perNframe = 1800 #30frames*60seconds -> record once per minute
+    result_file = open("result.txt", "w+")
 
-frameIndex = 0
-count = 0
-time_per_frame = []
-counter = 0
-skip_frames = 30
-W, H = None, None
+    # obtain image data from webcam
+    if testmode:
+        vs = cv2.VideoCapture("input/fwss1.MOV")
+        #vs = cv2.VideoCapture("input/fwss2.MOV")
+    else:
+       vs = cv2.VideoCapture(0) 
 
-# initialise object detection model
-headdet = HeadDetection()
+    frameIndex = 0
+    time_per_frame = []
+    left_counter = 0
+    right_counter = 0
+    stack_frames = 30
+    W, H = None, None
 
-# initilise object tracking model
-ct = CentroidTracker(maxDisappeared=40, maxDistance=50)
-trackers = []
-trackableObjects = {}
-rects = []
+    # initialise object detection model
+    headdet = HeadDetection(conf_thres=conf_thres)
 
-# object counting
-totalFrames = 0
-totalLeft = 0
-totalRight = 0
+    # initilise object tracking model
+    objtrack = SortAlgorithm(hor=True)
 
-# initialise all the timers to evaluate the pipeline speed
-obj_detection_timer = []
-obj_tracking_timer = []
-displaying_timer = []
+    # FPS counting
+    totalFrames = 0
 
-# start the frames per second throughput estimator
-fps = FPS().start()
+    # initialise all the timers to evaluate the pipeline speed
+    frames_storing_timer = PipelineTimer() # suggest disable during production
+    obj_detection_timer = PipelineTimer()
+    obj_tracking_timer = PipelineTimer()
+    displaying_timer = PipelineTimer()
+    #overall_timer = PipelineTimer()
+    #fps_timer = PipelineTimer()
 
-# loop over frames from the video file stream
-while True:
-    # read the next frame from the file
-    (grabbed, im0) = vs.read()
-    count += 1
+    # stack related variables initiation
+    stack_frames_count = 0
+    im0s=[]
 
-    # if the frame was not grabbed, then we have reached the end
-    # of the stream
-    if not grabbed:
-        break
+    # make a txt file
+    #txtfile = open('objdetectresult.txt', 'w+')
+    dims = []
 
-    # if the frame dimensions are empty, grab them
-    if W is None or H is None:
-        (H, W) = im0.shape[:2]
-        line = [(int(W/2),0),(int(W/2),H)]
-        #line = [(0, int(W/2)), (H, int(W/2))]
-        print(line)
+    # loop over frames from the video file stream
+    while True:
+        frames_storing_timer.start()
+        fps_timer.start()
+        # read the next frame from the file
+        (grabbed, im0) = vs.read()
+        stack_frames_count += 1
 
-    # feed the frame into the model
-    dets = []
-    dets = headdet.detect_one(im0)
-
-    # print detection results
-    if print_result:
-        pass
-
-    # draw dots and bbox on the frame
-    if dets is not None:
-        for *xyxy, conf, cls_conf, cls in dets:
-            centre_x = int((xyxy[0] + xyxy[2])/2)
-            centre_y = int((xyxy[1] + xyxy[3])/2)
-
-            tracker = dlib.correlation_tracker()
-            rect = dlib.rectangle(xyxy[0], xyxy[1], xyxy[2], xyxy[3])
-            tracker.start_track(im0, rect)
-            trackers.append(tracker)
-
-            if display & False:
-                cv2.circle(im0,(centre_x,centre_y), 2, (0,0,255), -1)
-                cv2.rectangle(im0, (xyxy[0],xyxy[1]), (xyxy[2],xyxy[3]), (0,0,255), 2)
-    
-    ## Object Tracking
-    objects = ct.update(rects)
-    # loop over the tracked objects
-    for (objectID, centroid) in objects.items():
-        # check to see if a trackable object exists for the current
-        # object ID
-        to = trackableObjects.get(objectID, None)
- 
-        # if there is no existing trackable object, create one
-        if to is None:
-            to = TrackableObject(objectID, centroid)
- 
-        # otherwise, there is a trackable object so we can utilize it
-        # to determine direction
-        else:
-            # the difference between the y-coordinate of the *current*
-            # centroid and the mean of *previous* centroids will tell
-            # us in which direction the object is moving (negative for
-            # 'up' and positive for 'down')
-            x = [c[0] for c in to.centroids]
-            direction = centroid[0] - np.mean(x)
-            to.centroids.append(centroid)
- 
-            # check to see if the object has been counted or not
-            if not to.counted:
-                # if the direction is negative (indicating the object
-                # is moving up) AND the centroid is above the center
-                # line, count the object
-                if direction < 0 and centroid[0] < W // 2 + 100:
-                    totalLeft += 1
-                    to.counted = True
- 
-                # if the direction is positive (indicating the object
-                # is moving down) AND the centroid is below the
-                # center line, count the object
-                elif direction > 0 and centroid[0] > W // 2 + 100:
-                    totalRight += 1
-                    to.counted = True
- 
-        # store the trackable object in our dictionary
-        trackableObjects[objectID] = to
-
-        # draw
-        text = "ID {}".format(objectID)
-        cv2.putText(im0, text, (centroid[0] - 10, centroid[1] - 10),
-            cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
-        cv2.circle(im0, (centroid[0], centroid[1]), 4, (0, 255, 0), -1)
-
-    info = [
-    ("Left", totalLeft),
-    ("Right", totalRight),
-    ]
-
-    for (i, (k, v)) in enumerate(info):
-        text = "{}: {}".format(k, v)
-        cv2.putText(im0, text, (10, H - ((i * 20) + 20)),
-            cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
-
-    print('Total Left: {}'.format(totalLeft))
-    print('Total Right: {}'.format(totalRight))
-
-    # display line
-    if display:
-        cv2.line(im0, line[0], line[1], (0,255,0), 3)
-        # display the drawn frame
-        cv2.imshow('frame', im0)
-        if cv2.waitKey(1) & 0xFF == ord('q'):
+        # if the frame was not grabbed, then we have reached the end
+        # of the stream
+        if not grabbed:
             break
 
-    # increase frame index
-    fps.update()
-    frameIndex += 1
+        # if the frame dimensions are empty, grab them
+        if W is None or H is None:
+            (H, W) = im0.shape[:2]
+            if hor:
+                line = [(int(W/2)+100,0),(int(W/2)+100,H)] # for fwss1.MOV
+                #line = [(int(W/2),0),(int(W/2),H)]
+            else:
+                line = [(0,(int(H/2)),(W,int(H/2))] # for fwss2.MOV or fwss3.MOV
+            objtrack.set_line(line[0], line[1])
 
-# release the file pointers
-print("[INFO] cleaning up...")
-vs.release()
+        if stack_mode:
+            im0s.append(im0)
 
-#dets = np.asarray(dets)
+        if stack_frames_count == stack_num:
 
-time_took = time.time() - timer_start
+            frames_storing_timer.end()
+            obj_detection_timer.start()
+            if stack_mode:
+                dets = headdet.detect_mult(im0s)
+                obj_detection_timer.end()
+                for i in range(len(dets)):
+                    print(type(dets[i]))
+                    dims.append(dets[i].shape)
+                    left_counter, right_counter = objtrack.output_counter(dets[i])
+                    print(left_counter, right_counter)
+            else:
+                dets = headdet.detect_one(im0)
 
-print('Time took: {}'.format(time_took))
-print('Pixel {} x {}'.format(H, W))
-print('FPS: {:.2f}'.format(frameIndex/time_took))
+                obj_detection_timer.end()
+                obj_tracking_timer.start()
 
-cv2.destroyAllWindows()
+                left_counter, right_counter = objtrack.output_counter(dets)
+                print(left_counter, right_counter)
+
+            obj_tracking_timer.end()
+
+            stack_frames_count = 0
+
+        # display option
+        if display:
+            # add a title
+            cv2.putText(im0, 'YOLOV3TINY+SORT HUMAN HEAD TRAFFIC COUNTER - DEVELOPED BY SH LEUNG', (50,50), cv2.FONT_HERSHEY_DUPLEX, 1.0, (255, 255, 255), 1)
+            # draw the line
+            cv2.line(im0, line[0], line[1], (0,255,0), 3)
+            # draw counters
+            if hor:
+                info_str = 'Left: {} | Right: {}'.format(left_counter, right_counter)
+            else:
+                info_str = 'Up: {} | Down: {}'.format(left_counter, right_counter)
+            cv2.putText(im0, info_str, (100,100), cv2.FONT_HERSHEY_DUPLEX, 1.0, (0, 255, 0), 3)
+            # display the drawn frame
+            cv2.imshow('frame', im0)
+            if cv2.waitKey(1) & 0xFF == ord('q'):
+                break
+
+        print(info_str)
+
+        # increase frame index
+        frameIndex += 1
+        
+        if test_mode:
+            if frameIndex > 450: # around 15s testing
+                break
+
+        if frameIndex % record_perNframe = 0:
+            result_file.write("{}, {}, {}\n".format(time.time(), left_counter, right_counter)
+
+    # release the file pointers
+    print("[INFO] cleaning up...")
+    vs.release()
+
+    print(dims)
+
+    print('Pixel {} x {}'.format(H, W))
+    #print('FPS: {:.2f}'.format(fps.fps()))
+
+    #report
+    print('Time took for Reading {} frame(s): {}'.format(stacknum, frames_storing_timer.report()))
+    print('Time took for ObjDetect {} frame(s): {}'.format(stacknum, obj_detection_timer.report()))
+    print('Time took for ObjTrack {} frame(s): {}'.format(stacknum, obj_tracking_timer.report()))
+
+    cv2.destroyAllWindows()
+
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--testmode', type=bool, default=False)
+    pareser.add_arguement('--display', type=bool, default=False)
+    pareser.add_arguement('--stacknum', type=int, default=1)
+    parser.add_argument('--hormode', type=bool, default=True)
+    parser.add_argument('--conf', type=float, default=0.4)
+    parser.add_argument('--savetxt', type=bool, default=True)
+    opt = parser.parse_args()
+
+    with torch.no_grad():
+        main(display = opt.display,
+            stacknum = opt.stacknum,
+            test_mode = opt.testmode,
+            conf_thres = opt.conf)
+
