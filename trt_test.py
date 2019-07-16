@@ -6,7 +6,9 @@ import torch
 torch_timer = PipelineTimer()
 trt_timer = PipelineTimer()
 
-model = Darknet('prod_model/yolov3-tiny.cfg', 416).eval().cuda()
+model = Darknet('prod_model/yolov3-tiny.cfg', 416)
+
+model = model(pretrained=True).eval().cuda()
 
 x = torch.ones((1, 3, 256, 416)).cuda()
 
