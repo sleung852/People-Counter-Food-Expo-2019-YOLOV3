@@ -21,9 +21,9 @@ def main(display, stacknum, test_mode, conf_thres, hor, savebool):
     display = opt.display
     stack_num = opt.stacknum
     if stacknum > 1:
-        stack_mode = False
+        stack_mode = True
     else:
-    	stack_mode = True
+    	stack_mode = False
     test_mode = opt.testmode
     conf_thres = opt.conf
 
@@ -104,15 +104,16 @@ def main(display, stacknum, test_mode, conf_thres, hor, savebool):
 
             frames_storing_timer.end()
             obj_detection_timer.start()
+
             if stack_mode:
                 dets = headdet.detect_mult(im0s)
                 obj_detection_timer.end()
                 for i in range(len(dets)):
-                    dims.append(dets[i].shape)
+                    #dims.append(dets[i].shape)
                     left_counter, right_counter = objtrack.output_counter(dets[i])
+                im0s = []
             else:
                 dets = headdet.detect_one(im0)
-
                 obj_detection_timer.end()
                 obj_tracking_timer.start()
 
@@ -122,6 +123,12 @@ def main(display, stacknum, test_mode, conf_thres, hor, savebool):
 
             stack_frames_count = 0
 
+        if hor:
+            info_str = 'Left: {} | Right: {}'.format(left_counter, right_counter)
+        else:
+            info_str = 'Up: {} | Down: {}'.format(left_counter, right_counter)
+        print(info_str)
+
         # display option
         if display:
             # add a title
@@ -129,17 +136,13 @@ def main(display, stacknum, test_mode, conf_thres, hor, savebool):
             # draw the line
             cv2.line(im0, line[0], line[1], (0,255,0), 3)
             # draw counters
-            if hor:
-                info_str = 'Left: {} | Right: {}'.format(left_counter, right_counter)
-            else:
-                info_str = 'Up: {} | Down: {}'.format(left_counter, right_counter)
             cv2.putText(im0, info_str, (100,100), cv2.FONT_HERSHEY_DUPLEX, 1.0, (0, 255, 0), 3)
             # display the drawn frame
             cv2.imshow('frame', im0)
             if cv2.waitKey(1) & 0xFF == ord('q'):
                 break
 
-        print(info_str)
+        
 
         # increase frame index
         frameIndex += 1
