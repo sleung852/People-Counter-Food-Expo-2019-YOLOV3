@@ -14,15 +14,15 @@ from objtracksort import SortAlgorithm
 from tools.pipelinetimer import PipelineTimer
 
 # setup
-display = False
+display = True
 print_result = True
 stack_mode = False
 stack_num = 1
-test_mode = True
+test_mode = False
 
 # obtain image data from webcam
 #vs = cv2.VideoCapture(0)
-vs = cv2.VideoCapture("input/fwss1.MOV")
+vs = cv2.VideoCapture("input/book4.mov")
 #vs = cv2.VideoCapture("input/fwss2.MOV")
 
 frameIndex = 0
@@ -75,7 +75,7 @@ while True:
         (H, W) = im0.shape[:2]
         #line = [(int(W/2),0),(int(W/2),H)]
         #line = [(0, int(H/2)), (W, int(H/2))]
-        line = [(int(W/2)+100,0),(int(W/2)+100,H)] # for fwss1.MOV
+        line = [(int(W/2)-100,0),(int(W/2)-100,H)] # for fwss1.MOV
         objtrack.set_line(line[0], line[1])
 
     if stack_mode:
@@ -109,12 +109,12 @@ while True:
     # display line
     if display:
         # add a title
-        cv2.putText(im0, 'YOLOV3TINY+SORT HUMAN HEAD TRAFFIC COUNTER - DEVELOPED BY SH LEUNG', (50,50), cv2.FONT_HERSHEY_DUPLEX, 1.0, (255, 255, 255), 1)
+        cv2.putText(im0, 'YOLOV3TINY+SORT TRAFFIC COUNTER - DEVELOPED BY SH LEUNG', (15,15), cv2.FONT_HERSHEY_DUPLEX, 0.5, (255, 255, 255), 1)
         # draw the line
         cv2.line(im0, line[0], line[1], (0,255,0), 3)
         # draw counters
         info_str = 'Left: {} | Right: {}'.format(left_counter, right_counter)
-        cv2.putText(im0, info_str, (100,100), cv2.FONT_HERSHEY_DUPLEX, 1.0, (0, 255, 0), 3)
+        cv2.putText(im0, info_str, (15,40), cv2.FONT_HERSHEY_DUPLEX, 0.5, (0, 255, 0), 1)
         # display the drawn frame
         cv2.imshow('frame', im0)
         if cv2.waitKey(1) & 0xFF == ord('q'):

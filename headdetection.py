@@ -50,7 +50,7 @@ class HeadDetection:
 				return result.numpy()
 			return result.numpy()
 
-		return None
+		return []
 
 	def detect_mult(self, im0_list):
 		im0_list_output = []
